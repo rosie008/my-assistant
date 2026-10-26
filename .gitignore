@@ -1,0 +1,31 @@
+# Environment variables and sensitive secrets
+.env
+*.env
+!.env.example
+
+# Python virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python caches and artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and user workspace downloads
+logs/
+*.log
+workspace/downloads/*
+!workspace/downloads/.gitkeep
