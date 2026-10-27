@@ -29,7 +29,7 @@ It provides file access, reads environment variables (regardless of passwords), 
 
 5. **Multi-Model Provider**:
    - **Google Gemini / AGY**: via API Key or Device Login (Application Default Credentials).
-   - **OpenAI / Codex**: via API Key (`gpt-4o`, `gpt-4o-mini`, `o3-mini`).
+   - **OpenAI / Codex**: via API key or Codex CLI device login.
    - **Local Models**: via Ollama, vLLM, or LM Studio with OpenAI-compatible API.
 
 ---
@@ -42,7 +42,14 @@ In [`.env`](.env):
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
 DEFAULT_PROVIDER=gemini
 GEMINI_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+# Or use a ChatGPT/Codex login managed by the official Codex CLI:
+OPENAI_AUTH_MODE=codex_cli
 ```
+
+For headless machines, install the official Codex CLI and run `python main.py --codex-device-login` (or `codex login --device-auth`) as the same OS user that runs the bot. Complete the displayed URL and one-time code, then set `OPENAI_AUTH_MODE=codex_cli`. Credentials remain managed by Codex; this assistant does not read or copy them. Use `python main.py --device-login` to verify the login. To switch back, set `OPENAI_AUTH_MODE=api_key` and provide `OPENAI_API_KEY`.
+
+On Linux, Codex also needs a working bubblewrap/user-namespace sandbox. If the bot reports that user namespaces are blocked, fix the host's bubblewrap or AppArmor configuration; this is separate from device authentication.
 
 ### 2. Verify Your Configuration
 ```bash

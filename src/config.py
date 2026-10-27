@@ -226,6 +226,22 @@ class Settings:
         return self.get_env("OPENAI_API_KEY", "")
 
     @property
+    def openai_auth_mode(self) -> str:
+        """OpenAI authentication: API key or the locally logged-in Codex CLI."""
+        value = self.get_env("OPENAI_AUTH_MODE", "").strip().lower()
+        if not value:
+            return "api_key" if self.openai_api_key else "codex_cli"
+        aliases = {"api": "api_key", "key": "api_key", "codex": "codex_cli", "cli": "codex_cli"}
+        mode = aliases.get(value, value)
+        if mode not in ("api_key", "codex_cli"):
+            raise ValueError("OPENAI_AUTH_MODE must be 'api_key' or 'codex_cli'")
+        return mode
+
+    @property
+    def codex_cli_path(self) -> str:
+        return self.get_env("CODEX_CLI_PATH", "codex")
+
+    @property
     def openai_model(self) -> str:
         return self.get_env("OPENAI_MODEL", self.config_md_settings.get("openai_model", "gpt-4o"))
 
@@ -260,6 +276,26 @@ class Settings:
     @property
     def command_timeout_seconds(self) -> int:
         return int(self.limitations_md_settings.get("command_timeout_seconds", 45))
+
+    @property
+    def max_directory_depth(self) -> int:
+        return max(0, int(self.limitations_md_settings.get("max_directory_depth", 5)))
+
+    @property
+    def max_directory_entries(self) -> int:
+        return max(1, int(self.limitations_md_settings.get("max_directory_entries", 500)))
+
+    @property
+    def max_search_files(self) -> int:
+        return max(1, int(self.limitations_md_settings.get("max_search_files", 500)))
+
+    @property
+    def max_search_file_bytes(self) -> int:
+        return max(1, int(self.limitations_md_settings.get("max_search_file_bytes", 1048576)))
+
+    @property
+    def codex_readiness_cache_seconds(self) -> float:
+        return max(0.0, float(self.config_md_settings.get("codex_readiness_cache_seconds", 300)))
 
     @property
     def forbidden_paths(self) -> List[str]:

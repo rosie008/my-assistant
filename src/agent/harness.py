@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import logging
+import time
 from typing import Any, Callable, Dict, List, Optional, Awaitable
 from src.config import settings
 from src.tools.registry import registry
@@ -52,10 +53,15 @@ class AgentHarness:
                 await on_status_update(f"🤔 Thinking ({model_name})...")
 
             try:
+                generation_started = time.monotonic()
                 response = await client.generate(
                     messages=messages,
                     tools=tools_schema,
                     model_name=model_name,
+                )
+                logger.info(
+                    "Model generation completed: provider_model=%s iteration=%d elapsed_ms=%d",
+                    model_name, current_iteration, (time.monotonic() - generation_started) * 1000,
                 )
             except Exception as e:
                 logger.exception("Model generation error in agent loop")
@@ -101,8 +107,13 @@ class AgentHarness:
                     await on_status_update(f"🔧 Calling `{fn_name}({args_summary})`...")
 
                 # Execute tool
-                logger.info(f"Agent executing tool: {fn_name} with args: {fn_args}")
+                logger.info("Agent executing tool: name=%s iteration=%d", fn_name, current_iteration)
+                tool_started = time.monotonic()
                 output = await registry.dispatch(fn_name, fn_args)
+                logger.info(
+                    "Tool completed: name=%s iteration=%d elapsed_ms=%d",
+                    fn_name, current_iteration, (time.monotonic() - tool_started) * 1000,
+                )
 
                 # Store tool observation in session memory
                 session.add_tool_response(

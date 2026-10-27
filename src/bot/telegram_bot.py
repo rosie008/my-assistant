@@ -73,7 +73,7 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"**Commands:**\n"
         f"• `/help` - View usage guide & capabilities\n"
         f"• `/model [name]` - View or switch model\n"
-        f"• `/provider [name]` - Switch provider (`gemini`, `openai`, `local`)\n"
+        f"• `/provider [name]` - Switch provider (`gemini`, `openai`/`codex`, `local`)\n"
         f"• `/status` - Check assistant status\n"
         f"• `/limits` - View rules from `LIMITATIONS.md`\n"
         f"• `/config` - View settings from `CONFIG.md`\n"
@@ -101,7 +101,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "5. ⚙️ **Configurable Limits:** All rules and limits are saved in `CONFIG.md` and `LIMITATIONS.md`.\n\n"
         "**Supported Providers:**\n"
         "• Google Gemini / AGY (`/provider gemini`)\n"
-        "• OpenAI / Codex (`/provider openai`)\n"
+        "• OpenAI API key or Codex device login (`/provider openai`)\n"
         "• Local Models (Ollama/vLLM) (`/provider local`)\n"
     )
     await send_safe_message(update, help_text)
@@ -139,7 +139,7 @@ async def provider_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not args:
         await update.effective_message.reply_text(
             f"Active provider: `{model_factory.active_provider}`\n"
-            f"Usage: `/provider <gemini|openai|local>`",
+            f"Usage: `/provider <gemini|openai|codex|local>`",
             parse_mode=ParseMode.MARKDOWN,
         )
         return
@@ -171,7 +171,8 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"• **Workspace:** `{settings.workspace_root}`\n\n"
         f"**Provider Status:**\n"
         f"• **Gemini:** Model `{status['gemini']['model']}` (API Key: `{'Set' if status['gemini']['has_api_key'] else 'ADC/Device'}`)\n"
-        f"• **OpenAI:** Model `{status['openai']['model']}` (API Key: `{'Set' if status['openai']['has_api_key'] else 'Missing'}`)\n"
+        f"• **OpenAI/Codex:** Model `{status['openai']['model']}` (Auth: `{status['openai']['auth_mode']}`, Ready: `{'Yes' if status['openai']['ready'] else 'No'}`)\n"
+        f"  `{status['openai']['detail']}`\n"
         f"• **Local:** Model `{status['local']['model']}` (URL: `{status['local']['endpoint']}`)\n"
     )
     await send_safe_message(update, status_text)

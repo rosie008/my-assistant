@@ -33,6 +33,11 @@ class OpenAIClient(BaseModelClient):
 
     def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
+            if not self.api_key and not self.base_url:
+                raise RuntimeError(
+                    "OpenAI authentication is not configured. Set OPENAI_API_KEY or "
+                    "set OPENAI_AUTH_MODE=codex_cli after running `codex login --device-auth`."
+                )
             self._client = AsyncOpenAI(
                 api_key=self.api_key or "sk-dummy-key-for-local-or-custom",
                 base_url=self.base_url,

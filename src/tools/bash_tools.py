@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 import asyncio
+import os
+import signal
 from src.config import settings
 from src.tools.registry import tool
 
@@ -22,15 +24,25 @@ async def execute_bash(command: str) -> str:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(settings.workspace_root),
+            start_new_session=True,
         )
 
+        communicate_task = asyncio.create_task(proc.communicate())
         try:
-            stdout_data, stderr_data = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            stdout_data, stderr_data = await asyncio.wait_for(asyncio.shield(communicate_task), timeout=timeout)
         except asyncio.TimeoutError:
             try:
-                proc.kill()
-            except Exception:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
                 pass
+            try:
+                await asyncio.wait_for(asyncio.shield(communicate_task), timeout=2)
+            except asyncio.TimeoutError:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
+                await communicate_task
             return f"Error: Command timed out after {timeout} seconds."
 
         stdout_str = stdout_data.decode("utf-8", errors="replace")

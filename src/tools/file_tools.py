@@ -20,6 +20,8 @@ from typing import Optional, List, Dict, Any
 from src.config import settings
 from src.tools.registry import tool
 
+_SKIPPED_DIRECTORIES = {".git", ".venv", "__pycache__", "node_modules"}
+
 
 def _resolve_safe_path(path_str: str) -> Path:
     """Resolve path and verify against forbidden security boundaries."""
@@ -138,27 +140,46 @@ def list_dir(path: str = ".", recursive: bool = False, max_depth: int = 2) -> st
         if not resolved.is_dir():
             return f"Error: '{path}' is not a directory."
 
-        results = []
+        results: List[str] = []
+        truncated = False
+        entry_limit = settings.max_directory_entries
+        output_limit = int(settings.limitations_md_settings.get("max_output_length", 10000))
+
+        def add_result(value: str) -> bool:
+            """Append one result while enforcing entry and response-size budgets."""
+            nonlocal truncated
+            if len(results) >= entry_limit or sum(len(item) + 1 for item in results) + len(value) > output_limit:
+                truncated = True
+                return False
+            results.append(value)
+            return True
+
         base_depth = len(resolved.parts)
+        effective_depth = min(max(0, max_depth), settings.max_directory_depth)
 
         if not recursive:
-            entries = sorted(resolved.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+            entries = sorted(resolved.iterdir(), key=lambda p: p.name.lower())
             for entry in entries:
-                if entry.name.startswith(".venv") or entry.name == ".git":
+                if entry.name in _SKIPPED_DIRECTORIES:
                     continue
-                type_indicator = "[DIR]" if entry.is_dir() else f"[{entry.stat().st_size} B]"
-                results.append(f"{type_indicator:>10}  {entry.name}")
+                try:
+                    is_dir = entry.is_dir()
+                    type_indicator = "[DIR]" if is_dir else f"[{entry.stat().st_size} B]"
+                except OSError:
+                    type_indicator = "[unavailable]"
+                if not add_result(f"{type_indicator:>10}  {entry.name}"):
+                    break
         else:
             for root, dirs, files in os.walk(resolved):
                 curr_depth = len(Path(root).parts) - base_depth
-                # Skip hidden/large dirs
-                dirs[:] = [d for d in dirs if d not in (".git", ".venv", "__pycache__", "node_modules")]
-                if curr_depth >= max_depth:
+                dirs[:] = [d for d in dirs if d not in _SKIPPED_DIRECTORIES]
+                if curr_depth >= effective_depth:
                     dirs.clear()
 
                 rel_root = os.path.relpath(root, resolved)
                 if rel_root != ".":
-                    results.append(f"[DIR]       {rel_root}/")
+                    if not add_result(f"[DIR]       {rel_root}/"):
+                        break
 
                 for f in sorted(files):
                     fpath = Path(root) / f
@@ -167,10 +188,16 @@ def list_dir(path: str = ".", recursive: bool = False, max_depth: int = 2) -> st
                     except Exception:
                         size = 0
                     rel_file = os.path.relpath(fpath, resolved)
-                    results.append(f"[{size} B] {rel_file}")
+                    if not add_result(f"[{size} B] {rel_file}"):
+                        break
+                if truncated:
+                    break
 
         header = f"=== Directory Listing: {resolved} ({len(results)} items) ===\n"
-        return header + ("\n".join(results) if results else "(empty directory)")
+        body = "\n".join(results) if results else "(empty directory)"
+        if truncated:
+            body += f"\n... (Listing truncated at {entry_limit} entries or {output_limit} characters)"
+        return header + body
 
     except PermissionError as pe:
         return f"Permission Error: {pe}"
@@ -188,17 +215,28 @@ def search_files(pattern: str, path: str = ".", file_pattern: Optional[str] = No
 
         regex = re.compile(pattern)
         matches: List[str] = []
+        inspected_files = 0
+        skipped_large_files = 0
+        max_files = settings.max_search_files
+        max_file_bytes = settings.max_search_file_bytes
 
         file_filter = re.compile(file_pattern) if file_pattern else None
 
         for root, dirs, files in os.walk(resolved):
-            dirs[:] = [d for d in dirs if d not in (".git", ".venv", "__pycache__", "node_modules")]
+            dirs[:] = [d for d in dirs if d not in _SKIPPED_DIRECTORIES]
             for filename in files:
                 if file_filter and not file_filter.search(filename):
                     continue
 
                 filepath = Path(root) / filename
                 try:
+                    if inspected_files >= max_files:
+                        matches.append(f"... (Search truncated after {max_files} files)")
+                        return "\n".join(matches)
+                    if filepath.stat().st_size > max_file_bytes:
+                        skipped_large_files += 1
+                        continue
+                    inspected_files += 1
                     with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
                         for line_num, line in enumerate(f, start=1):
                             if regex.search(line):
@@ -211,7 +249,8 @@ def search_files(pattern: str, path: str = ".", file_pattern: Optional[str] = No
                     continue
 
         if not matches:
-            return f"No matches found for pattern '{pattern}' in '{path}'."
+            suffix = f" Skipped {skipped_large_files} file(s) over {max_file_bytes} bytes." if skipped_large_files else ""
+            return f"No matches found for pattern '{pattern}' in '{path}'.{suffix}"
         return "\n".join(matches)
 
     except Exception as e:

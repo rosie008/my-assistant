@@ -80,6 +80,34 @@ def test_file_operations(tmp_path: Path):
     assert not test_file.exists()
 
 
+def test_recursive_directory_listing_clamps_depth_and_entry_count(tmp_path: Path, monkeypatch):
+    monkeypatch.setitem(settings.limitations_md_settings, "max_directory_depth", 1)
+    monkeypatch.setitem(settings.limitations_md_settings, "max_directory_entries", 2)
+    (tmp_path / "top.txt").write_text("top")
+    (tmp_path / "another.txt").write_text("another")
+    (tmp_path / "third.txt").write_text("third")
+    nested = tmp_path / "one" / "two"
+    nested.mkdir(parents=True)
+    (nested / "deep.txt").write_text("deep")
+
+    result = list_dir(str(tmp_path), recursive=True, max_depth=99)
+
+    assert "Listing truncated" in result
+    assert "one/two/deep.txt" not in result
+
+
+def test_search_files_limits_files_and_skips_large_files(tmp_path: Path, monkeypatch):
+    monkeypatch.setitem(settings.limitations_md_settings, "max_search_files", 1)
+    monkeypatch.setitem(settings.limitations_md_settings, "max_search_file_bytes", 4)
+    (tmp_path / "large.txt").write_text("needle is too large")
+    (tmp_path / "first.txt").write_text("none")
+    (tmp_path / "second.txt").write_text("needle")
+
+    result = search_files("needle", str(tmp_path))
+
+    assert "Search truncated after 1 files" in result
+
+
 def test_limitations_enforcement():
     """Requirement 5: Limitations saved in .md and enforced."""
     # Forbidden path access blocked

@@ -12,6 +12,8 @@ You can edit any value here and reload it live with `/reload` in Telegram withou
 | `default_provider` | `gemini` | Active provider: `gemini`, `openai`, or `local` |
 | `gemini_model` | `gemini-3.8-flash` | Current Gemini options: `gemini-4-argon` (flagship), `gemini-3.8-flash` (balanced), `gemini-3.6-flash`, `gemini-3.5-flash-lite` (economy) |
 | `openai_model` | `gpt-6.1-sol` | Current OpenAI options: `gpt-6-astra` (flagship), `gpt-6.1-sol` (balanced), `gpt-6.1-terra`, `gpt-6-luna` (economy) |
+| `OPENAI_AUTH_MODE` | `api_key` | `api_key` uses `OPENAI_API_KEY`; `codex_cli` uses credentials managed by the Codex CLI |
+| `CODEX_CLI_PATH` | `codex` | Codex executable used for `codex_cli` authentication |
 | `local_model` | `qwen2.5-coder:7b` | Model name on local runner (Ollama, vLLM, LM Studio) |
 | `local_base_url` | `http://localhost:11434/v1` | Local OpenAI-compatible API endpoint |
 
@@ -33,6 +35,7 @@ You can edit any value here and reload it live with `/reload` in Telegram withou
 |---|---|---|
 | `max_tool_iterations` | `10` | Max sequential tool calls per user query |
 | `timeout_seconds` | `120` | Timeout for model generation calls |
+| `codex_readiness_cache_seconds` | `300` | How long a successful Codex CLI login check may be reused |
 | `send_intermediate_status` | `true` | Show tool status updates in Telegram chat |
 
 ---

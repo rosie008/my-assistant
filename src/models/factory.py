@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 import logging
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from src.config import settings
 from src.models.base import BaseModelClient
 from src.models.gemini_client import GeminiClient
 from src.models.openai_client import OpenAIClient
+from src.models.codex_cli_client import CodexCliClient
 from src.models.local_client import LocalModelClient
 
 logger = logging.getLogger(__name__)
@@ -32,9 +33,12 @@ class ModelFactory:
             return client, model
 
         elif provider_name in ("openai", "codex", "gpt"):
-            if "openai" not in self._clients:
-                self._clients["openai"] = OpenAIClient()
-            client = self._clients["openai"]
+            client_key = "codex_cli" if settings.openai_auth_mode == "codex_cli" else "openai"
+            if client_key not in self._clients:
+                self._clients[client_key] = (
+                    CodexCliClient() if client_key == "codex_cli" else OpenAIClient()
+                )
+            client = self._clients[client_key]
             model = self.active_model_override or settings.openai_model
             return client, model
 
@@ -65,6 +69,11 @@ class ModelFactory:
 
     def get_status(self) -> Dict[str, Any]:
         """Return readiness status for all providers."""
+        if settings.openai_auth_mode == "codex_cli":
+            codex_ready, codex_detail = CodexCliClient.readiness(settings.codex_cli_path)
+        else:
+            codex_ready = bool(settings.openai_api_key)
+            codex_detail = "API key configured" if codex_ready else "OpenAI API key is not configured"
         return {
             "active_provider": self.active_provider,
             "active_model_override": self.active_model_override,
@@ -76,6 +85,10 @@ class ModelFactory:
             "openai": {
                 "model": settings.openai_model,
                 "has_api_key": bool(settings.openai_api_key),
+                "auth_mode": settings.openai_auth_mode,
+                "codex_cli_path": settings.codex_cli_path,
+                "ready": codex_ready,
+                "detail": codex_detail,
             },
             "local": {
                 "model": settings.local_model,
