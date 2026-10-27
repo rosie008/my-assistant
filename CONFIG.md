@@ -10,8 +10,8 @@ You can edit any value here and reload it live with `/reload` in Telegram withou
 | Setting | Value | Description |
 |---|---|---|
 | `default_provider` | `gemini` | Active provider: `gemini`, `openai`, or `local` |
-| `gemini_model` | `gemini-2.5-flash` | Gemini model name (`gemini-2.5-flash`, `gemini-2.5-pro`) |
-| `openai_model` | `gpt-4o` | OpenAI model name (`gpt-4o`, `gpt-4o-mini`, `o3-mini`, `codex`) |
+| `gemini_model` | `gemini-3.8-flash` | Current Gemini options: `gemini-4-argon` (flagship), `gemini-3.8-flash` (balanced), `gemini-3.6-flash`, `gemini-3.5-flash-lite` (economy) |
+| `openai_model` | `gpt-6.1-sol` | Current OpenAI options: `gpt-6-astra` (flagship), `gpt-6.1-sol` (balanced), `gpt-6.1-terra`, `gpt-6-luna` (economy) |
 | `local_model` | `qwen2.5-coder:7b` | Model name on local runner (Ollama, vLLM, LM Studio) |
 | `local_base_url` | `http://localhost:11434/v1` | Local OpenAI-compatible API endpoint |
 
