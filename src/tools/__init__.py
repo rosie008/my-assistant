@@ -17,6 +17,7 @@ from src.tools.env_tools import (
     set_env_variable,
 )
 from src.tools.bash_tools import execute_bash
+from src.tools.web_tools import check_website, web_request
 
 __all__ = [
     "registry",
@@ -33,4 +34,6 @@ __all__ = [
     "read_env_file_contents",
     "set_env_variable",
     "execute_bash",
+    "check_website",
+    "web_request",
 ]

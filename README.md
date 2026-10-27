@@ -32,6 +32,10 @@ It provides file access, reads environment variables (regardless of passwords), 
    - **OpenAI / Codex**: via API key or Codex CLI device login.
    - **Local Models**: via Ollama, vLLM, or LM Studio with OpenAI-compatible API.
 
+6. **Website Requests**:
+   - `check_website` checks reachability and HTTP status.
+   - `web_request` submits forms and reads authenticated pages while reusing cookies within the same assistant conversation. It supports cookie-based HTTP login; JavaScript-driven login and interactive SSO require a browser integration.
+
 ---
 
 ## 🚀 How to Run

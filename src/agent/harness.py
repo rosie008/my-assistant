@@ -5,7 +5,7 @@ import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Awaitable
 from src.config import settings
-from src.tools.registry import registry
+from src.tools.registry import registry, set_tool_session_id, reset_tool_session_id
 from src.models.base import Message, ToolCall
 from src.models.factory import model_factory
 from src.agent.memory import memory_manager
@@ -54,11 +54,15 @@ class AgentHarness:
 
             try:
                 generation_started = time.monotonic()
-                response = await client.generate(
-                    messages=messages,
-                    tools=tools_schema,
-                    model_name=model_name,
-                )
+                tool_context = set_tool_session_id(session_id)
+                try:
+                    response = await client.generate(
+                        messages=messages,
+                        tools=tools_schema,
+                        model_name=model_name,
+                    )
+                finally:
+                    reset_tool_session_id(tool_context)
                 logger.info(
                     "Model generation completed: provider_model=%s iteration=%d elapsed_ms=%d",
                     model_name, current_iteration, (time.monotonic() - generation_started) * 1000,
@@ -103,13 +107,20 @@ class AgentHarness:
 
                 if on_status_update:
                     # Short human-readable status
-                    args_summary = ", ".join(f"{k}={repr(v)[:30]}" for k, v in fn_args.items())
+                    if fn_name == "execute_bash":
+                        # Shell commands can contain credentials in curl flags or URLs.
+                        args_summary = "command=<hidden>"
+                    else:
+                        args_summary = ", ".join(
+                            f"{k}={'<hidden>' if any(secret in k.lower() for secret in ('password', 'passwd', 'secret', 'token', 'authorization')) else repr(v)[:30]}"
+                            for k, v in fn_args.items()
+                        )
                     await on_status_update(f"🔧 Calling `{fn_name}({args_summary})`...")
 
                 # Execute tool
                 logger.info("Agent executing tool: name=%s iteration=%d", fn_name, current_iteration)
                 tool_started = time.monotonic()
-                output = await registry.dispatch(fn_name, fn_args)
+                output = await registry.dispatch(fn_name, fn_args, session_id=session_id)
                 logger.info(
                     "Tool completed: name=%s iteration=%d elapsed_ms=%d",
                     fn_name, current_iteration, (time.monotonic() - tool_started) * 1000,

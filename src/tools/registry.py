@@ -9,6 +9,7 @@ Provides:
 
 from __future__ import annotations
 import asyncio
+import contextvars
 import inspect
 import json
 import logging
@@ -16,6 +17,25 @@ from typing import Any, Callable, Dict, List, Optional, get_type_hints
 from pydantic import BaseModel, create_model
 
 logger = logging.getLogger(__name__)
+
+_tool_session_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "tool_session_id", default=None
+)
+
+
+def set_tool_session_id(session_id: str):
+    """Set the conversation id for tools that maintain per-chat state."""
+    return _tool_session_id.set(session_id)
+
+
+def reset_tool_session_id(token) -> None:
+    """Restore the prior conversation context after a model request."""
+    _tool_session_id.reset(token)
+
+
+def get_tool_session_id() -> Optional[str]:
+    """Return the conversation id associated with the current tool call."""
+    return _tool_session_id.get()
 
 
 class Tool:
@@ -144,13 +164,23 @@ class ToolRegistry:
         lines.append("</tools>")
         return "\n".join(lines)
 
-    async def dispatch(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+    async def dispatch(
+        self, tool_name: str, arguments: Dict[str, Any], session_id: Optional[str] = None
+    ) -> str:
         """Dispatch and execute a tool call, returning formatted string output."""
         tool = self.get(tool_name)
         if not tool:
             return f"Error: Tool '{tool_name}' not found. Available tools: {list(self._tools.keys())}"
 
-        result = await tool.execute(**arguments)
+        # Codex may dispatch tools from inside generate(), where the harness
+        # has already established this context. Explicit values from the
+        # normal tool loop override it; omitted values preserve the context.
+        token = _tool_session_id.set(session_id) if session_id is not None else None
+        try:
+            result = await tool.execute(**arguments)
+        finally:
+            if token is not None:
+                _tool_session_id.reset(token)
         if isinstance(result, (dict, list)):
             try:
                 return json.dumps(result, indent=2, ensure_ascii=False)
