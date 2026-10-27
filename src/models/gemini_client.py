@@ -4,11 +4,12 @@ Requirement 6: Supports Gemini via API Key or Device Login (Application Default 
 """
 
 from __future__ import annotations
+import base64
 import json
 import logging
 from typing import Any, Dict, List, Optional
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 from src.config import settings
 from src.models.base import BaseModelClient, Message, ModelResponse, ToolCall, extract_xml_tool_calls
 
@@ -116,18 +117,43 @@ class GeminiClient(BaseModelClient):
                     )
                 )
             elif msg.role == "assistant":
-                parts: List[types.Part] = []
-                if msg.content:
-                    parts.append(types.Part.from_text(text=msg.content))
-                if msg.tool_calls:
-                    for tc in msg.tool_calls:
-                        parts.append(
-                            types.Part.from_function_call(
+                gemini_content = None
+                if msg.provider_metadata and "gemini_content" in msg.provider_metadata:
+                    raw_gc = msg.provider_metadata["gemini_content"]
+                    try:
+                        if isinstance(raw_gc, types.Content):
+                            gemini_content = raw_gc
+                        elif isinstance(raw_gc, dict):
+                            gemini_content = types.Content.model_validate(raw_gc)
+                        elif isinstance(raw_gc, str):
+                            gemini_content = types.Content.model_validate_json(raw_gc)
+                    except Exception as e:
+                        logger.warning("Failed to restore preserved Gemini content: %s", e)
+                        gemini_content = None
+
+                if gemini_content is not None:
+                    contents.append(gemini_content)
+                else:
+                    parts: List[types.Part] = []
+                    if msg.content:
+                        parts.append(types.Part.from_text(text=msg.content))
+                    if msg.tool_calls:
+                        for tc in msg.tool_calls:
+                            p = types.Part.from_function_call(
                                 name=tc.name,
                                 args=tc.arguments,
                             )
-                        )
-                contents.append(types.Content(role="model", parts=parts))
+                            if tc.provider_metadata and "thought_signature" in tc.provider_metadata:
+                                sig = tc.provider_metadata["thought_signature"]
+                                if isinstance(sig, str):
+                                    try:
+                                        p.thought_signature = base64.b64decode(sig)
+                                    except Exception:
+                                        p.thought_signature = sig.encode("utf-8")
+                                elif isinstance(sig, bytes):
+                                    p.thought_signature = sig
+                            parts.append(p)
+                    contents.append(types.Content(role="model", parts=parts))
             elif msg.role == "tool":
                 # Function response part
                 tool_output: Dict[str, Any]
@@ -142,7 +168,15 @@ class GeminiClient(BaseModelClient):
                     name=msg.name or "tool_response",
                     response=tool_output,
                 )
-                contents.append(types.Content(role="user", parts=[part]))
+                if (
+                    contents
+                    and contents[-1].role == "user"
+                    and contents[-1].parts
+                    and any(p.function_response for p in contents[-1].parts)
+                ):
+                    contents[-1].parts.append(part)
+                else:
+                    contents.append(types.Content(role="user", parts=[part]))
 
         gemini_tools = self._convert_tools(tools) if tools else None
 
@@ -162,6 +196,7 @@ class GeminiClient(BaseModelClient):
 
             tool_calls: List[ToolCall] = []
             text_parts: List[str] = []
+            provider_metadata: Optional[Dict[str, Any]] = None
 
             if response.candidates:
                 candidate = response.candidates[0]
@@ -172,7 +207,26 @@ class GeminiClient(BaseModelClient):
                         if part.function_call:
                             fc = part.function_call
                             args_dict = dict(fc.args) if fc.args else {}
-                            tool_calls.append(ToolCall(name=fc.name, arguments=args_dict))
+                            tc_meta = {}
+                            if part.thought_signature:
+                                tc_meta["thought_signature"] = (
+                                    base64.b64encode(part.thought_signature).decode("ascii")
+                                    if isinstance(part.thought_signature, bytes)
+                                    else str(part.thought_signature)
+                                )
+                            tool_calls.append(
+                                ToolCall(
+                                    name=fc.name,
+                                    arguments=args_dict,
+                                    provider_metadata=tc_meta if tc_meta else None,
+                                )
+                            )
+                    try:
+                        provider_metadata = {
+                            "gemini_content": json.loads(candidate.content.model_dump_json())
+                        }
+                    except Exception as e:
+                        logger.warning("Failed to serialize Gemini candidate content: %s", e)
 
             content_text = "".join(text_parts).strip()
 
@@ -180,11 +234,30 @@ class GeminiClient(BaseModelClient):
             if not tool_calls and "<tool_call>" in content_text:
                 content_text, tool_calls = extract_xml_tool_calls(content_text)
 
+            finish_reason = None
+            if response.candidates and response.candidates[0].finish_reason:
+                finish_reason = getattr(response.candidates[0].finish_reason, "name", str(response.candidates[0].finish_reason))
+
             return ModelResponse(
                 content=content_text,
                 tool_calls=tool_calls,
+                finish_reason=finish_reason,
                 raw=response,
+                provider_metadata=provider_metadata,
             )
+        except errors.APIError as e:
+            err_msg = getattr(e, "message", str(e))
+            status_code = getattr(e, "code", getattr(e, "status_code", 400))
+            if "thought_signature" in err_msg.lower():
+                logger.error(
+                    "Gemini API error (%s): Tool-call thought_signature requirement failed. "
+                    "History may be missing provider-specific metadata. Details: %s",
+                    status_code,
+                    err_msg,
+                )
+            else:
+                logger.error("Gemini API error (%s): %s", status_code, err_msg)
+            raise
         except Exception as e:
-            logger.exception(f"Gemini API error: {e}")
+            logger.exception("Gemini API unexpected error: %s", e)
             raise

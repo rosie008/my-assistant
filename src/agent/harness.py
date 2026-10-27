@@ -59,7 +59,18 @@ class AgentHarness:
                 )
             except Exception as e:
                 logger.exception("Model generation error in agent loop")
-                error_msg = f"❌ Error communicating with model ({model_name}): {str(e)}"
+                err_text = getattr(e, "message", str(e))
+                if "thought_signature" in err_text.lower():
+                    error_msg = (
+                        f"❌ Error communicating with model ({model_name}): "
+                        "Tool call requires Gemini thought signature metadata which was missing in the request history."
+                    )
+                else:
+                    first_line = err_text.strip().split("\n")[0]
+                    if len(first_line) > 200:
+                        first_line = first_line[:200] + "..."
+                    error_msg = f"❌ Error communicating with model ({model_name}): {first_line}"
+
                 if on_status_update:
                     await on_status_update(error_msg)
                 return error_msg
@@ -67,11 +78,18 @@ class AgentHarness:
             # Check if model made any tool calls
             if not response.tool_calls:
                 final_response_text = response.content or "(No response generated)"
-                session.add_assistant_message(final_response_text)
+                session.add_assistant_message(
+                    final_response_text,
+                    provider_metadata=response.provider_metadata,
+                )
                 break
 
             # Handle tool calls
-            session.add_assistant_message(response.content, tool_calls=response.tool_calls)
+            session.add_assistant_message(
+                response.content,
+                tool_calls=response.tool_calls,
+                provider_metadata=response.provider_metadata,
+            )
 
             for tool_call in response.tool_calls:
                 fn_name = tool_call.name

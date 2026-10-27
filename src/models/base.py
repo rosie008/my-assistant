@@ -14,6 +14,7 @@ class ToolCall(BaseModel):
     id: str = Field(default_factory=lambda: f"call_{uuid.uuid4().hex[:8]}")
     name: str
     arguments: Dict[str, Any]
+    provider_metadata: Optional[Dict[str, Any]] = None
 
 
 class Message(BaseModel):
@@ -23,6 +24,7 @@ class Message(BaseModel):
     tool_calls: Optional[List[ToolCall]] = None
     tool_call_id: Optional[str] = None
     name: Optional[str] = None
+    provider_metadata: Optional[Dict[str, Any]] = None
 
 
 class ModelResponse(BaseModel):
@@ -31,6 +33,7 @@ class ModelResponse(BaseModel):
     tool_calls: List[ToolCall] = Field(default_factory=list)
     finish_reason: Optional[str] = None
     raw: Any = None
+    provider_metadata: Optional[Dict[str, Any]] = None
 
 
 def extract_xml_tool_calls(text: str) -> tuple[str, List[ToolCall]]:
