@@ -14,6 +14,18 @@ logger = logging.getLogger(__name__)
 class OpenAIClient(BaseModelClient):
     """Client for OpenAI / Codex / OpenAI-compatible models."""
 
+    @staticmethod
+    def _uses_max_completion_tokens(model: str) -> bool:
+        """Return whether ``model`` uses the newer completion token field.
+
+        Newer OpenAI reasoning and model generations reject the legacy
+        ``max_tokens`` field. Keep this decision local to the OpenAI client so
+        OpenAI-compatible local servers continue receiving their usual
+        payload unless their model name identifies a newer OpenAI model.
+        """
+        normalized = model.lower()
+        return normalized.startswith(("gpt-5", "gpt-6", "o1", "o3", "o4"))
+
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         self.api_key = api_key or settings.openai_api_key
         self.base_url = base_url
@@ -63,8 +75,18 @@ class OpenAIClient(BaseModelClient):
         kwargs: Dict[str, Any] = {
             "model": model,
             "messages": formatted_messages,
-            "max_tokens": tokens,
         }
+        token_parameter = (
+            "max_completion_tokens"
+            if self._uses_max_completion_tokens(model)
+            else "max_tokens"
+        )
+        kwargs[token_parameter] = tokens
+        # gpt-6-luna accepts function tools through Chat Completions only when
+        # reasoning_effort is explicitly disabled. Without this, the API may
+        # reject tool-enabled requests with HTTP 400.
+        if model.lower().startswith("gpt-6") and tools:
+            kwargs["reasoning_effort"] = "none"
         # o1 / o3 / reasoning models might not support temperature
         if not (model.startswith("o1") or model.startswith("o3")):
             kwargs["temperature"] = temp
