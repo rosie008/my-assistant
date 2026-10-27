@@ -27,6 +27,7 @@ All file operations, environment reads, and shell commands are checked against t
 | `max_file_read_bytes` | `1048576` | Files larger than 1MB require line slicing |
 | `max_directory_depth` | `5` | Recursive directory listings will not exceed depth 5 |
 | `max_directory_entries` | `500` | Directory listings stop after this many entries and report truncation |
+| `filesystem_tool_timeout_seconds` | `15` | Directory listing tools return a timeout error if a filesystem operation stalls |
 | `max_search_files` | `500` | Searches inspect at most this many eligible files |
 | `max_search_file_bytes` | `1048576` | Searches skip files larger than 1MB |
 | `restrict_to_workspace` | `false` | If true, restricts paths strictly to `workspace_root` |

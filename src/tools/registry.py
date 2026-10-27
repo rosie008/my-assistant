@@ -8,6 +8,7 @@ Provides:
 """
 
 from __future__ import annotations
+import asyncio
 import inspect
 import json
 import logging
@@ -20,10 +21,12 @@ logger = logging.getLogger(__name__)
 class Tool:
     """Represents an agent executable tool."""
 
-    def __init__(self, fn: Callable, name: Optional[str] = None, description: Optional[str] = None):
+    def __init__(self, fn: Callable, name: Optional[str] = None, description: Optional[str] = None,
+                 timeout_seconds: Optional[float] = None):
         self.fn = fn
         self.name = name or fn.__name__
         self.description = description or (inspect.getdoc(fn) or "").strip()
+        self.timeout_seconds = timeout_seconds
         self.signature = inspect.signature(fn)
         self.type_hints = get_type_hints(fn)
         self.pydantic_model = self._create_pydantic_model()
@@ -83,10 +86,24 @@ class Tool:
 
         try:
             if inspect.iscoroutinefunction(self.fn):
-                result = await self.fn(**kwargs)
+                operation = self.fn(**kwargs)
             else:
-                result = self.fn(**kwargs)
+                # File tools are synchronous and may touch slow or disconnected
+                # mounts (for example, a VPN-backed directory under ~/). Never
+                # run them on the event loop: one blocked stat()/readdir() would
+                # otherwise prevent Telegram updates and all other tools from
+                # being processed.
+                operation = asyncio.to_thread(self.fn, **kwargs)
+            if self.timeout_seconds is None:
+                result = await operation
+            else:
+                result = await asyncio.wait_for(operation, timeout=self.timeout_seconds)
             return result
+        except asyncio.TimeoutError:
+            if self.timeout_seconds is None:
+                return f"Error executing tool '{self.name}': TimeoutError"
+            return (f"Error: Tool '{self.name}' timed out after {self.timeout_seconds:g} seconds. "
+                    "The directory may be slow or unavailable; verify the path or try again later.")
         except Exception as e:
             logger.exception(f"Tool {self.name} failed with error: {e}")
             return f"Error executing tool '{self.name}': {type(e).__name__}: {str(e)}"
@@ -98,10 +115,11 @@ class ToolRegistry:
     def __init__(self):
         self._tools: Dict[str, Tool] = {}
 
-    def register(self, fn: Optional[Callable] = None, *, name: Optional[str] = None, description: Optional[str] = None):
+    def register(self, fn: Optional[Callable] = None, *, name: Optional[str] = None,
+                 description: Optional[str] = None, timeout_seconds: Optional[float] = None):
         """Decorator or function to register a tool."""
         def decorator(f: Callable) -> Callable:
-            tool = Tool(f, name=name, description=description)
+            tool = Tool(f, name=name, description=description, timeout_seconds=timeout_seconds)
             self._tools[tool.name] = tool
             return f
 

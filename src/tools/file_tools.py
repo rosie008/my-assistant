@@ -130,7 +130,10 @@ def edit_file(path: str, target: str, replacement: str) -> str:
         return f"Error editing file '{path}': {type(e).__name__}: {str(e)}"
 
 
-@tool(description="List files and subdirectories in a given directory path.")
+@tool(
+    description="List files and subdirectories in a given directory path. The operation has a bounded timeout for slow or unavailable mounts.",
+    timeout_seconds=settings.filesystem_tool_timeout_seconds,
+)
 def list_dir(path: str = ".", recursive: bool = False, max_depth: int = 2) -> str:
     """List directory contents with sizes and file types."""
     try:

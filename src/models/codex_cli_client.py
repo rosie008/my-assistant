@@ -218,8 +218,48 @@ class CodexCliClient(BaseModelClient):
             except json.JSONDecodeError:
                 continue
 
-            # JSON-RPC responses do not have a method. A response to
-            # turn/start is normally harmless here, but errors are terminal.
+            # Dynamic tools are client-executed RPC requests from app-server.
+            # They carry both a method and an id, so handle them before
+            # filtering ordinary JSON-RPC responses. Without this branch the
+            # server waits for a tool result until the turn times out.
+            if event.get("method") == "item/tool/call" and "id" in event:
+                params = event.get("params", {})
+                if not isinstance(params, dict):
+                    params = {}
+                tool_name = str(params.get("tool", ""))
+                arguments = params.get("arguments", {})
+                if not isinstance(arguments, dict):
+                    result_text = "Error: Tool arguments must be a JSON object."
+                    success = False
+                else:
+                    try:
+                        # Import lazily so the model adapter remains usable
+                        # without importing/registering the application's tool
+                        # modules at module load time.
+                        from src.tools.registry import registry
+
+                        result_text = await registry.dispatch(tool_name, arguments)
+                        success = not result_text.lower().startswith(("error", "permission error"))
+                    except Exception as exc:
+                        logger.exception("Codex dynamic tool failed: %s", tool_name)
+                        result_text = f"Error executing tool '{tool_name}': {type(exc).__name__}: {exc}"
+                        success = False
+
+                assert proc.stdin is not None
+                reply = {
+                    "jsonrpc": "2.0",
+                    "id": event["id"],
+                    "result": {
+                        "contentItems": [{"type": "inputText", "text": str(result_text)}],
+                        "success": success,
+                    },
+                }
+                proc.stdin.write((json.dumps(reply) + "\n").encode())
+                await proc.stdin.drain()
+                continue
+
+            # Ordinary JSON-RPC responses have an id but no method. Errors are
+            # terminal; successful acknowledgements can be ignored here.
             if "id" in event:
                 error = event.get("error")
                 if error:

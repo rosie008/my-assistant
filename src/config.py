@@ -286,6 +286,10 @@ class Settings:
         return max(1, int(self.limitations_md_settings.get("max_directory_entries", 500)))
 
     @property
+    def filesystem_tool_timeout_seconds(self) -> float:
+        return max(1.0, float(self.limitations_md_settings.get("filesystem_tool_timeout_seconds", 15)))
+
+    @property
     def max_search_files(self) -> int:
         return max(1, int(self.limitations_md_settings.get("max_search_files", 500)))
 
