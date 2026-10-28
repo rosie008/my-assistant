@@ -40,7 +40,21 @@ It provides file access, reads environment variables (regardless of passwords), 
 
 ## 🚀 How to Run
 
-### 1. Set Your Telegram Token & API Keys
+### 1. Install Python and project dependencies
+
+Install Python 3 (and its `venv` module) if it is not already installed. From the project directory, create and activate a virtual environment, then install the requirements:
+
+```bash
+python3 --version
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+On Ubuntu/Debian, if `venv` is unavailable, install it with `sudo apt install python3-venv` and rerun the commands. Keep the virtual environment activated when running the commands below.
+
+### 2. Set Your Telegram Token & API Keys
 In [`.env`](.env):
 ```bash
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
@@ -55,7 +69,7 @@ For headless machines, install the official Codex CLI and run `python main.py --
 
 On Linux, Codex also needs a working bubblewrap/user-namespace sandbox. If the bot reports that user namespaces are blocked, fix the host's bubblewrap or AppArmor configuration; this is separate from device authentication.
 
-### 2. Verify Your Configuration
+### 3. Verify Your Configuration
 ```bash
 # Check loaded environment variables & passwords
 .venv/bin/python main.py --check-env
@@ -64,12 +78,12 @@ On Linux, Codex also needs a working bubblewrap/user-namespace sandbox. If the b
 .venv/bin/python main.py --status
 ```
 
-### 3. Start the Bot
+### 4. Start the Bot
 ```bash
 .venv/bin/python main.py
 ```
 
-### 4. Interactive Terminal Mode (Optional)
+### 5. Interactive Terminal Mode (Optional)
 If you want to test or chat from terminal without opening Telegram:
 ```bash
 .venv/bin/python main.py --cli
